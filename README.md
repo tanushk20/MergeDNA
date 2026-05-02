@@ -123,7 +123,7 @@ Set `dummy: True` in the config for a quick sanity check (64 training samples). 
 
 ## Results
 
-Training for 2 epochs on chromosome 1 (~56k sequences, batch size 4, gradient accumulation steps 16, effective batch size 64):
+Training for 2 epochs on chromosome 1 (~56k sequences, batch size 4, gradient accumulation steps 16, effective batch size 64) on a single H100 GPU for ~6 hours, using the config in `config/TEMPLATE.yaml`:
 
 | Epoch | Global Step | Val MTR | Val MTR-Latent | Val AMTM | Val Total |
 |---|---|---|---|---|---|
