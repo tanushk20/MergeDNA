@@ -42,22 +42,14 @@ class Trainer:
         return train_loader, val_loader
 
     def _forward(self, batch: torch.Tensor) -> torch.Tensor:
-        # batch: (B, L, 4)
-        batch = batch.to(self.device)
-
-        # project each sequence independently: (B, L, 4) -> (B, L, D)
-        projected = self.projector(batch)
-
-        # components currently operate on (N, D), so iterate over batch
-        outputs = []
-        for x in projected:
-            x = self.local_encoder(x)
-            x = self.latent_encoder(x)
-            x = self.latent_decoder(x)
-            x = self.local_decoder(x)
-            outputs.append(x)
-
-        return torch.stack(outputs)  # (B, L, D)
+        # batch: (B, L, 4) -> (B, L, D)
+        x = batch.to(self.device)
+        x = self.projector(x)
+        x = self.local_encoder(x)
+        x = self.latent_encoder(x)
+        x = self.latent_decoder(x)
+        x = self.local_decoder(x)
+        return x
 
     def train(self, num_epochs: int = 10):
         models = [self.projector, self.local_encoder, self.local_decoder,
