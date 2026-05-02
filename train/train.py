@@ -54,8 +54,9 @@ class Trainer:
         device: str = "cpu",
         dummy: bool = False,
         grad_accum_steps: int = 1,
-        n_warmup: int = 10000,
+        n_warmup: int = 1000,
         num_masked_tokens: int = 16,
+        val_every: int = 1000,
     ):
         self.loss_manager = loss_manager
         self.K = K
@@ -69,6 +70,7 @@ class Trainer:
         self.grad_accum_steps = grad_accum_steps
         self.n_warmup = n_warmup
         self.num_masked_tokens = num_masked_tokens
+        self.val_every = val_every
         self.history = []
 
         set_seed(seed)
@@ -111,6 +113,40 @@ class Trainer:
             writer.writeheader()
             writer.writerows(self.history)
 
+    def validate(self, models, desc: str = "  val"):
+        for m in models:
+            m.eval()
+
+        val_running = {"mtr": 0.0, "mtr_latent": 0.0, "amtm": 0.0, "total": 0.0}
+
+        with torch.no_grad():
+            for batch in tqdm(self.val_loader, desc=desc, leave=False):
+                batch = batch.to(self.device)
+                _, breakdown = self.loss_manager.loss(
+                    batch,
+                    self.local_encoder,
+                    self.latent_encoder,
+                    self.latent_decoder,
+                    self.local_decoder,
+                    num_masked_tokens=self.num_masked_tokens,
+                )
+                for k, v in breakdown.items():
+                    val_running[k] += v
+
+        val_avg = {k: v / len(self.val_loader) for k, v in val_running.items()}
+
+        print(
+            f"  val total {val_avg['total']:.4f} | "
+            f"mtr {val_avg['mtr']:.4f} | "
+            f"mtr_latent {val_avg['mtr_latent']:.4f} | "
+            f"amtm {val_avg['amtm']:.4f}"
+        )
+
+        for m in models:
+            m.train()
+
+        return val_avg
+
     def train(self, num_epochs: int = 10):
         models = [self.loss_manager, self.local_encoder, self.local_decoder,
                   self.latent_encoder, self.latent_decoder]
@@ -122,6 +158,7 @@ class Trainer:
         scheduler = _make_scheduler(self.optimizer, self.n_warmup, total_steps)
 
         self.optimizer.zero_grad()
+        global_step = 0
         for epoch in range(num_epochs):
             running = {"mtr": 0.0, "mtr_latent": 0.0, "amtm": 0.0, "total": 0.0}
             epoch_running = {"mtr": 0.0, "mtr_latent": 0.0, "amtm": 0.0, "total": 0.0}
@@ -148,6 +185,16 @@ class Trainer:
                     self.optimizer.step()
                     scheduler.step()
                     self.optimizer.zero_grad()
+                    global_step += 1
+
+                    if self.val_every > 0 and global_step % self.val_every == 0:
+                        pbar.write(f"\nRunning validation at global step {global_step}")
+                        val_avg = self.validate(models, desc=f"  val step {global_step}")
+
+                        row = {"epoch": epoch + 1, "global_step": global_step}
+                        row.update({f"val_{k}": v for k, v in val_avg.items()})
+                        self.history.append(row)
+                        self._save_history("metrics.csv")
 
                 if step % LOG_EVERY == 0:
                     avg = {k: v / LOG_EVERY for k, v in running.items()}
@@ -196,38 +243,3 @@ class Trainer:
                 "optimizer": self.optimizer.state_dict(),
                 "scheduler": scheduler.state_dict(),
             }, f"checkpoint_epoch{epoch + 1}.pt")
-
-            # validation
-            for m in models:
-                m.eval()
-            val_running = {"mtr": 0.0, "mtr_latent": 0.0, "amtm": 0.0, "total": 0.0}
-            with torch.no_grad():
-                for batch in tqdm(self.val_loader, desc="  val", leave=False):
-                    batch = batch.to(self.device)
-                    _, breakdown = self.loss_manager.loss(
-                        batch,
-                        self.local_encoder,
-                        self.latent_encoder,
-                        self.latent_decoder,
-                        self.local_decoder,
-                        num_masked_tokens=self.num_masked_tokens,
-                    )
-                    for k, v in breakdown.items():
-                        val_running[k] += v
-
-            val_avg = {k: v / len(self.val_loader) for k, v in val_running.items()}
-            print(
-                f"  val total {val_avg['total']:.4f} | "
-                f"mtr {val_avg['mtr']:.4f} | "
-                f"mtr_latent {val_avg['mtr_latent']:.4f} | "
-                f"amtm {val_avg['amtm']:.4f}"
-            )
-
-            row = {"epoch": epoch + 1}
-            row.update({f"train_{k}": v for k, v in epoch_avg.items()})
-            row.update({f"val_{k}": v for k, v in val_avg.items()})
-            self.history.append(row)
-            self._save_history("metrics.csv")
-
-            for m in models:
-                m.train()
