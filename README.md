@@ -10,7 +10,7 @@ A simplified implementation of [MergeDNA: Context-aware Genome Modeling with Dyn
 |---|---|
 | Reading and understanding the paper | ~2.5 hrs |
 | Implementation | ~4.5 hrs |
-| Fixing bugs and issues | ~1 hr |
+| Fixing bugs and issues | ~1.5 hrs |
 
 ---
 
@@ -92,6 +92,21 @@ Sequences are split into non-overlapping 4096 bp windows for simplicity. The dat
 
 ---
 
+## Running
+
+```bash
+pip install torch numpy pyyaml tqdm
+
+# Download chr1 and chunk into 4096 bp windows (requires seqkit)
+# Place the resulting FASTA at data/human_chr1_4096_filtered.fa
+
+python main.py --config config/TEMPLATE.yaml
+```
+
+Set `dummy: True` in the config for a quick sanity check (64 training samples). Set `device: cuda` for GPU training.
+
+---
+
 ## What's missing / simplifications
 
 1. **Single-head attention.** The paper uses standard multi-head Transformer blocks. This implementation uses single-head attention throughout for simplicity.
@@ -122,7 +137,7 @@ Training for 2 epochs on chromosome 1 (~56k sequences, batch size 4, gradient ac
 
 **What we can see:** The reconstruction losses (`val_mtr`, `val_mtr_latent`) drop quickly and consistently — from ~0.011 to ~0.006 within the first epoch — indicating the model is learning to compress and reconstruct DNA sequences. The AMTM loss (`val_amtm`) improves more slowly (~1.325 → ~1.293 over two epochs), which is expected: predicting masked tokens from context is a harder task and a better proxy for whether the model is learning meaningful representations.
 
-**Caveats:** The reconstruction losses (`val_mtr`, `val_mtr_latent`) are clearly decreasing, which is encouraging. However, the AMTM loss barely moves from what would be expected near a random baseline (~1.33 for a 4-class prediction task). This is likely because chromosome 1 has low biological context diversity — repetitive regions dominate, so the model has little signal to learn meaningful masked token predictions from context. A more diverse training set spanning multiple chromosomes or species would be needed to see meaningful AMTM improvement. These results are also with single-head attention and a fixed compression ratio, which are known simplifications. Evaluation on a downstream task (promoter prediction, splice sites) would be a more reliable measure of representation quality.
+**Caveats:** The reconstruction losses (`val_mtr`, `val_mtr_latent`) are clearly decreasing, which is encouraging. However, the AMTM loss barely moves from what would be expected near a random baseline (~1.386 for a 4-class prediction task). This is likely because of low biological diversity in the training data, so the model has little signal to learn meaningful masked token predictions from context. A more diverse training set spanning multiple chromosomes or species would be needed to see meaningful AMTM improvement. These results are also with single-head attention and a fixed compression ratio, which are known simplifications. Evaluation on a downstream task (promoter prediction, splice sites) would be a more reliable measure of representation quality.
 
 ---
 

@@ -54,7 +54,7 @@ def load_components(cfg: dict) -> dict:
         betas=(0.9, 0.95),
     )
 
-    num_masked_tokens = 4096 // latent_compression
+    num_masked_tokens = N // latent_compression
 
     trainer = Trainer(
         dataset=dataset,
