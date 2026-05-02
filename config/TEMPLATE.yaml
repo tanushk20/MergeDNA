@@ -7,24 +7,24 @@ model:
   K: 16                    # local window size
   local_compression: 2     # local encoder compresses N -> N/2
   latent_compression: 4    # latent encoder compresses N -> N/4
-  local_encoder_layers: 2
-  latent_encoder_layers: 4
-  latent_decoder_layers: 2
-  local_decoder_layers: 1
+  local_encoder_layers: 4
+  latent_encoder_layers: 20
+  latent_decoder_layers: 4
+  local_decoder_layers: 2
 
 loss:
   weight_mtr: 1.0
-  weight_mtr_latent: 1.0
+  weight_mtr_latent: 0.25
   weight_amtm: 1.0
 
 training:
-  batch_size: 8
+  batch_size: 4
   num_epochs: 10
   val_split: 0.1
-  num_workers: 16
+  num_workers: 8
   lr: 0.0001
   device: cuda             # set to "cuda" for GPU
   seed: 42
-  dummy: false             # if true, subset train set to 64 samples for quick testing
-  grad_accum_steps: 4      # accumulate gradients over this many batches before stepping
+  dummy: True            # if true, subset train set to 64 samples for quick testing
+  grad_accum_steps: 16      # accumulate gradients over this many batches before stepping
   n_warmup: 10000          # linear warmup steps before cosine annealing
