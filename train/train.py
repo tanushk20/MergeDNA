@@ -110,6 +110,7 @@ class Trainer:
         self.optimizer.zero_grad()
         for epoch in range(num_epochs):
             running = {"mtr": 0.0, "mtr_latent": 0.0, "amtm": 0.0, "total": 0.0}
+            epoch_running = {"mtr": 0.0, "mtr_latent": 0.0, "amtm": 0.0, "total": 0.0}
 
             pbar = tqdm(self.train_loader, desc=f"Epoch {epoch + 1}/{num_epochs}", leave=True)
             for step, batch in enumerate(pbar, 1):
@@ -127,6 +128,7 @@ class Trainer:
 
                 for k, v in breakdown.items():
                     running[k] += v
+                    epoch_running[k] += v
 
                 if step % self.grad_accum_steps == 0:
                     self.optimizer.step()
@@ -150,8 +152,14 @@ class Trainer:
                 scheduler.step()
                 self.optimizer.zero_grad()
 
-            epoch_avg = running["total"] / (len(self.train_loader) % LOG_EVERY or LOG_EVERY)
-            pbar.write(f"Epoch {epoch + 1}/{num_epochs} done | avg total loss: {epoch_avg:.4f}")
+            epoch_avg = {k: v / len(self.train_loader) for k, v in epoch_running.items()}
+            pbar.write(
+                f"Epoch {epoch + 1}/{num_epochs} done | "
+                f"train total {epoch_avg['total']:.4f} | "
+                f"mtr {epoch_avg['mtr']:.4f} | "
+                f"mtr_latent {epoch_avg['mtr_latent']:.4f} | "
+                f"amtm {epoch_avg['amtm']:.4f}"
+            )
 
             torch.save({
                 "epoch": epoch + 1,
@@ -166,7 +174,7 @@ class Trainer:
             # validation
             for m in models:
                 m.eval()
-            val_total = 0.0
+            val_running = {"mtr": 0.0, "mtr_latent": 0.0, "amtm": 0.0, "total": 0.0}
             with torch.no_grad():
                 for batch in tqdm(self.val_loader, desc="  val", leave=False):
                     batch = batch.to(self.device)
@@ -178,7 +186,14 @@ class Trainer:
                         self.local_decoder,
                         K=self.K,
                     )
-                    val_total += breakdown["total"]
-            print(f"  val loss: {val_total / len(self.val_loader):.4f}")
+                    for k, v in breakdown.items():
+                        val_running[k] += v
+            val_avg = {k: v / len(self.val_loader) for k, v in val_running.items()}
+            print(
+                f"  val total {val_avg['total']:.4f} | "
+                f"mtr {val_avg['mtr']:.4f} | "
+                f"mtr_latent {val_avg['mtr_latent']:.4f} | "
+                f"amtm {val_avg['amtm']:.4f}"
+            )
             for m in models:
                 m.train()

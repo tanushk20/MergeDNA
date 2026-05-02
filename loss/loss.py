@@ -20,13 +20,18 @@ class LossManager(nn.Module):
         latent_decoder: nn.Module,
         local_decoder: nn.Module,
     ) -> torch.Tensor:
-        x, local_source = local_encoder(batch, tome=True)
-        x, _ = latent_encoder(x)
+        x, local_source, local_size = local_encoder(batch, tome=True)
+        x, _, _ = latent_encoder(x, tome = False)
         x = latent_decoder(x)
         logits = local_decoder(x, local_source)     # (B, N, 4)
 
         targets = batch.argmax(dim=-1)
-        return F.cross_entropy(logits.view(-1, 4), targets.view(-1))
+        valid_mask = batch.sum(dim=-1) > 0
+
+        return F.cross_entropy(
+            logits[valid_mask],
+            targets[valid_mask],
+        )
 
     def compute_loss_mtr_latent(
         self,
@@ -36,15 +41,20 @@ class LossManager(nn.Module):
         latent_decoder: nn.Module,
         local_decoder: nn.Module,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        x, local_source = local_encoder(batch, tome=True)
-        x, local_source = x.detach(), local_source.detach()
+        x, local_source, local_size = local_encoder(batch, tome=True)
+        x, local_source, local_size = x.detach(), local_source.detach(), local_size.detach()
 
-        x, latent_source = latent_encoder(x, tome=True)
+        x, latent_source, latent_size = latent_encoder(x, tome=True, source=None, size=local_size)
         x = latent_decoder(x, latent_source)        # unmerge latent: K' -> L
         logits = local_decoder(x, local_source)     # unmerge local: L -> N
 
         targets = batch.argmax(dim=-1)
-        loss = F.cross_entropy(logits.view(-1, 4), targets.view(-1))
+        valid_mask = batch.sum(dim=-1) > 0
+
+        loss = F.cross_entropy(
+            logits[valid_mask],
+            targets[valid_mask],
+        )
         return loss, latent_source, local_source
 
     def sample_masks(
@@ -78,16 +88,20 @@ class LossManager(nn.Module):
         # zero out masked positions in input: X * (1 - M_N)
         masked_batch = batch * (1.0 - M_N).unsqueeze(-1)   # (B, N, 4)
 
-        x, local_source = local_encoder(masked_batch, tome=True)
-        x, _ = latent_encoder(x)
+        x, local_source, local_size = local_encoder(masked_batch, tome=True)
+        x, _ , _= latent_encoder(x, tome = False)
         x = latent_decoder(x)
         logits = local_decoder(x, local_source)             # (B, N, 4)
 
         # loss only on masked positions, averaged over K masked tokens
         targets = batch.argmax(dim=-1)                      # (B, N)
+        valid_mask = batch.sum(dim=-1) > 0                  # (B, N)
+
         log_probs = F.log_softmax(logits, dim=-1)           # (B, N, 4)
         correct = log_probs.gather(-1, targets.unsqueeze(-1)).squeeze(-1)  # (B, N)
-        return -(correct * M_N).sum() / M_N.sum()
+
+        mask = M_N * valid_mask.float()
+        return -(correct * mask).sum() / mask.sum().clamp_min(1.0)
 
     def loss(
         self,

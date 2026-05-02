@@ -26,7 +26,8 @@ class LocalWindowSelfAttn(nn.Module):
     def forward(
         self, x: torch.Tensor, source: Optional[torch.Tensor] = None,
         tome: bool = False, reduce_by: int = 0,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        size: Optional[torch.Tensor] = None,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
         # x: (B*nw, K_cur, D)
         metric = self.metric_proj(x)                # compute before attention
         Q, K, V = self.q_proj(x), self.k_proj(x), self.v_proj(x)
@@ -37,10 +38,10 @@ class LocalWindowSelfAttn(nn.Module):
         if tome:
             merge, _ = bipartite_soft_matching(metric, r=reduce_by)
             source = merge_source(merge, x, source)
-            x, _ = merge_wavg(merge, x)
+            x, size = merge_wavg(merge, x, size)
 
         x = self.norm2(x + self.ff(x))
-        return x, source
+        return x, source, size
 
 
 class SelfAttn(nn.Module):
@@ -61,7 +62,8 @@ class SelfAttn(nn.Module):
     def forward(
         self, x: torch.Tensor, source: Optional[torch.Tensor] = None,
         tome: bool = False, reduce_by: int = 0,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        size: Optional[torch.Tensor] = None,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
         # x: (B, N, D)
         metric = self.metric_proj(x)                # compute before attention
         Q, K, V = self.q_proj(x), self.k_proj(x), self.v_proj(x)
@@ -72,7 +74,7 @@ class SelfAttn(nn.Module):
         if tome:
             merge, _ = bipartite_soft_matching(metric, r=reduce_by)
             source = merge_source(merge, x, source)
-            x, _ = merge_wavg(merge, x)
+            x, size  = merge_wavg(merge, x, size)
 
         x = self.norm2(x + self.ff(x))
-        return x, source
+        return x, source, size

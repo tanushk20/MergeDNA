@@ -13,13 +13,12 @@ class LatentEncoder(nn.Module):
         self.layers = nn.ModuleList([SelfAttn(D=D) for _ in range(num_layers)])
 
     def forward(
-        self, x: torch.Tensor, tome: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        self, x: torch.Tensor, tome: bool = False, source: Optional[torch.Tensor] = None, size: Optional[torch.Tensor] = None,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
         # x: (B, L, D) -> (B, L', D)
-        source = None
         for layer in self.layers:
-            x, source = layer(x, source, tome=tome, reduce_by=self.reduce_by)
-        return x, source
+            x, source, size = layer(x, source, tome=tome, reduce_by=self.reduce_by, size=size)
+        return x, source, size
 
 
 class LatentDecoder(nn.Module):
@@ -32,5 +31,5 @@ class LatentDecoder(nn.Module):
         if source is not None:
             x = unmerge_source(x, source)
         for layer in self.layers:
-            x, _ = layer(x)
+            x, _, _ = layer(x)
         return x
