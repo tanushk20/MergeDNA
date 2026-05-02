@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader, random_split
 from tqdm import tqdm
+import os
 
 
 LOG_EVERY = 10
@@ -88,6 +89,15 @@ class Trainer:
 
             epoch_avg = running["total"] / (len(self.train_loader) % LOG_EVERY or LOG_EVERY)
             pbar.write(f"Epoch {epoch + 1}/{num_epochs} done | avg total loss: {epoch_avg:.4f}")
+
+            torch.save({
+                "epoch": epoch + 1,
+                "local_encoder": self.local_encoder.state_dict(),
+                "local_decoder": self.local_decoder.state_dict(),
+                "latent_encoder": self.latent_encoder.state_dict(),
+                "latent_decoder": self.latent_decoder.state_dict(),
+                "optimizer": self.optimizer.state_dict(),
+            }, f"checkpoint_epoch{epoch + 1}.pt")
 
             # validation
             for m in models:
