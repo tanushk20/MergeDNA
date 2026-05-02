@@ -51,6 +51,7 @@ def load_components(cfg: dict) -> dict:
         list(latent_decoder.parameters()) +
         list(local_decoder.parameters()),
         lr=train_cfg["lr"],
+        betas=(0.9, 0.95),
     )
 
     trainer = Trainer(
@@ -62,10 +63,14 @@ def load_components(cfg: dict) -> dict:
         latent_decoder=latent_decoder,
         optimizer=optimizer,
         K=K,
+        seed=train_cfg["seed"],
         val_split=train_cfg["val_split"],
         batch_size=train_cfg["batch_size"],
         num_workers=train_cfg["num_workers"],
         device=train_cfg["device"],
+        dummy=train_cfg["dummy"],
+        grad_accum_steps=train_cfg["grad_accum_steps"],
+        n_warmup=train_cfg["n_warmup"],
     )
 
     return {
