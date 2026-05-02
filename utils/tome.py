@@ -27,7 +27,7 @@ def bipartite_soft_matching(
         return do_nothing, do_nothing
 
     with torch.no_grad():
-        metric = metric / metric.norm(dim=-1, keepdim=True)
+        metric = metric / metric.norm(dim=-1, keepdim=True).clamp_min(1e-6)
 
         # split tokens into even (a) and odd (b) sets
         a, b = metric[..., ::2, :], metric[..., 1::2, :]

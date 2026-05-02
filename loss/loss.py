@@ -61,7 +61,7 @@ class LossManager(nn.Module):
         self,
         latent_source: torch.Tensor,
         local_source: torch.Tensor,
-        K: int,
+        num_masked_tokens: int,
     ) -> torch.Tensor:
         # latent_source: (B, K', L) — which local tokens each latent token covers
         # local_source:  (B, L, N) — which original tokens each local token covers
@@ -70,7 +70,7 @@ class LossManager(nn.Module):
         prob = torch.einsum('bkl,bk->bl', latent_source, 1.0 / g ** 2)          # (B, L)
         prob = prob / prob.sum(dim=-1, keepdim=True)
 
-        sampled = torch.multinomial(prob, num_samples=K, replacement=False)      # (B, K)
+        sampled = torch.multinomial(prob, num_samples=num_masked_tokens, replacement=False)      # (B, K)
         M_L = torch.zeros_like(prob).scatter_(1, sampled, 1.0)                  # (B, L)
 
         M_N = (local_source.transpose(-1, -2) @ M_L.unsqueeze(-1)).squeeze(-1)  # (B, N)
@@ -110,7 +110,7 @@ class LossManager(nn.Module):
         latent_encoder: nn.Module,
         latent_decoder: nn.Module,
         local_decoder: nn.Module,
-        K: int,
+        num_masked_tokens: int,
     ) -> Tuple[torch.Tensor, dict]:
         loss_mtr = self.compute_loss_mtr(
             batch, local_encoder, latent_encoder, latent_decoder, local_decoder,
@@ -118,7 +118,7 @@ class LossManager(nn.Module):
         loss_mtr_latent, latent_source, local_source = self.compute_loss_mtr_latent(
             batch, local_encoder, latent_encoder, latent_decoder, local_decoder,
         )
-        M_N = self.sample_masks(latent_source.detach(), local_source.detach(), K)
+        M_N = self.sample_masks(latent_source.detach(), local_source.detach(), num_masked_tokens)
         loss_amtm = self.compute_loss_adaptive(
             batch, M_N, local_encoder, latent_encoder, latent_decoder, local_decoder,
         )

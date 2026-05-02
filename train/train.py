@@ -1,5 +1,6 @@
 import math
 import random
+import csv
 
 import numpy as np
 import torch
@@ -54,6 +55,7 @@ class Trainer:
         dummy: bool = False,
         grad_accum_steps: int = 1,
         n_warmup: int = 10000,
+        num_masked_tokens: int = 16,
     ):
         self.loss_manager = loss_manager
         self.K = K
@@ -66,6 +68,8 @@ class Trainer:
         self.dummy = dummy
         self.grad_accum_steps = grad_accum_steps
         self.n_warmup = n_warmup
+        self.num_masked_tokens = num_masked_tokens
+        self.history = []
 
         set_seed(seed)
         self.train_loader, self.val_loader = self._split_dataset(
@@ -97,6 +101,16 @@ class Trainer:
         )
         return train_loader, val_loader
 
+    def _save_history(self, path: str = "metrics.csv"):
+        if not self.history:
+            return
+
+        fieldnames = list(self.history[0].keys())
+        with open(path, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(self.history)
+
     def train(self, num_epochs: int = 10):
         models = [self.loss_manager, self.local_encoder, self.local_decoder,
                   self.latent_encoder, self.latent_decoder]
@@ -122,7 +136,7 @@ class Trainer:
                     self.latent_encoder,
                     self.latent_decoder,
                     self.local_decoder,
-                    K=self.K,
+                    num_masked_tokens=self.num_masked_tokens,
                 )
                 (loss / self.grad_accum_steps).backward()
 
@@ -145,6 +159,18 @@ class Trainer:
                         f"amtm {avg['amtm']:.4f}"
                     )
                     running = {k: 0.0 for k in running}
+
+            # log final partial bucket, e.g. if epoch has 25 steps and LOG_EVERY=10
+            leftover = len(self.train_loader) % LOG_EVERY
+            if leftover != 0:
+                avg = {k: v / leftover for k, v in running.items()}
+                pbar.write(
+                    f"  step {len(self.train_loader):5d} | "
+                    f"total {avg['total']:.4f} | "
+                    f"mtr {avg['mtr']:.4f} | "
+                    f"mtr_latent {avg['mtr_latent']:.4f} | "
+                    f"amtm {avg['amtm']:.4f}"
+                )
 
             # flush any remaining accumulated gradients at epoch end
             if len(self.train_loader) % self.grad_accum_steps != 0:
@@ -184,10 +210,11 @@ class Trainer:
                         self.latent_encoder,
                         self.latent_decoder,
                         self.local_decoder,
-                        K=self.K,
+                        num_masked_tokens=self.num_masked_tokens,
                     )
                     for k, v in breakdown.items():
                         val_running[k] += v
+
             val_avg = {k: v / len(self.val_loader) for k, v in val_running.items()}
             print(
                 f"  val total {val_avg['total']:.4f} | "
@@ -195,5 +222,12 @@ class Trainer:
                 f"mtr_latent {val_avg['mtr_latent']:.4f} | "
                 f"amtm {val_avg['amtm']:.4f}"
             )
+
+            row = {"epoch": epoch + 1}
+            row.update({f"train_{k}": v for k, v in epoch_avg.items()})
+            row.update({f"val_{k}": v for k, v in val_avg.items()})
+            self.history.append(row)
+            self._save_history("metrics.csv")
+
             for m in models:
                 m.train()

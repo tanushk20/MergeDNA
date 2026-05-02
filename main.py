@@ -54,6 +54,8 @@ def load_components(cfg: dict) -> dict:
         betas=(0.9, 0.95),
     )
 
+    num_masked_tokens = 4096 // latent_compression
+
     trainer = Trainer(
         dataset=dataset,
         loss_manager=loss_manager,
@@ -71,6 +73,7 @@ def load_components(cfg: dict) -> dict:
         dummy=train_cfg["dummy"],
         grad_accum_steps=train_cfg["grad_accum_steps"],
         n_warmup=train_cfg["n_warmup"],
+        num_masked_tokens=num_masked_tokens,
     )
 
     return {
