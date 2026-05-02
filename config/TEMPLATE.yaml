@@ -1,14 +1,21 @@
 data:
   fasta_path: data/human_chr1_4096_filtered.fa
+  context_length: 4096
 
 model:
   D: 1024                  # embedding dimension
   K: 16                    # local window size
+  local_compression: 2     # local encoder compresses N -> N/2
+  latent_compression: 4    # latent encoder compresses N -> N/4
   local_encoder_layers: 2
   latent_encoder_layers: 4
   latent_decoder_layers: 2
   local_decoder_layers: 1
-  num_heads: 1
+
+loss:
+  weight_mtr: 1.0
+  weight_mtr_latent: 1.0
+  weight_amtm: 1.0
 
 training:
   batch_size: 8

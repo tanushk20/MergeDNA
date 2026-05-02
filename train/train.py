@@ -1,6 +1,10 @@
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader, random_split
+from tqdm import tqdm
+
+
+LOG_EVERY = 10
 
 
 class Trainer:
@@ -13,12 +17,14 @@ class Trainer:
         latent_encoder: nn.Module,
         latent_decoder: nn.Module,
         optimizer: torch.optim.Optimizer,
+        K: int,
         val_split: float = 0.1,
         batch_size: int = 8,
         num_workers: int = 4,
         device: str = "cpu",
     ):
         self.loss_manager = loss_manager
+        self.K = K
         self.local_encoder = local_encoder
         self.local_decoder = local_decoder
         self.latent_encoder = latent_encoder
@@ -48,20 +54,37 @@ class Trainer:
             m.to(self.device).train()
 
         for epoch in range(num_epochs):
-            total_loss = 0.0
-            for batch in self.train_loader:
+            running = {"mtr": 0.0, "mtr_latent": 0.0, "amtm": 0.0, "total": 0.0}
+
+            pbar = tqdm(self.train_loader, desc=f"Epoch {epoch + 1}/{num_epochs}", leave=True)
+            for step, batch in enumerate(pbar, 1):
                 batch = batch.to(self.device)
                 self.optimizer.zero_grad()
-                loss = self.loss_manager.loss(
+
+                loss, breakdown = self.loss_manager.loss(
                     batch,
                     self.local_encoder,
                     self.latent_encoder,
                     self.latent_decoder,
                     self.local_decoder,
+                    K=self.K,
                 )
                 loss.backward()
                 self.optimizer.step()
-                total_loss += loss.item()
 
-            avg_loss = total_loss / len(self.train_loader)
-            print(f"Epoch {epoch + 1}/{num_epochs} | loss: {avg_loss:.4f}")
+                for k, v in breakdown.items():
+                    running[k] += v
+
+                if step % LOG_EVERY == 0:
+                    avg = {k: v / LOG_EVERY for k, v in running.items()}
+                    pbar.write(
+                        f"  step {step:5d} | "
+                        f"total {avg['total']:.4f} | "
+                        f"mtr {avg['mtr']:.4f} | "
+                        f"mtr_latent {avg['mtr_latent']:.4f} | "
+                        f"amtm {avg['amtm']:.4f}"
+                    )
+                    running = {k: 0.0 for k in running}
+
+            epoch_avg = running["total"] / (len(self.train_loader) % LOG_EVERY or LOG_EVERY)
+            pbar.write(f"Epoch {epoch + 1}/{num_epochs} done | avg total loss: {epoch_avg:.4f}")
