@@ -7,7 +7,7 @@ class Trainer:
     def __init__(
         self,
         dataset: Dataset,
-        projector: nn.Module,
+        loss_manager: nn.Module,
         local_encoder: nn.Module,
         local_decoder: nn.Module,
         latent_encoder: nn.Module,
@@ -18,7 +18,7 @@ class Trainer:
         num_workers: int = 4,
         device: str = "cpu",
     ):
-        self.projector = projector
+        self.loss_manager = loss_manager
         self.local_encoder = local_encoder
         self.local_decoder = local_decoder
         self.latent_encoder = latent_encoder
@@ -41,29 +41,27 @@ class Trainer:
         val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=False, num_workers=num_workers)
         return train_loader, val_loader
 
-    def _forward(self, batch: torch.Tensor) -> torch.Tensor:
-        # batch: (B, L, 4) -> (B, L, D)
-        x = batch.to(self.device)
-        x = self.projector(x)
-        x = self.local_encoder(x)
-        x = self.latent_encoder(x)
-        x = self.latent_decoder(x)
-        x = self.local_decoder(x)
-        return x
-
     def train(self, num_epochs: int = 10):
-        models = [self.projector, self.local_encoder, self.local_decoder,
+        models = [self.loss_manager, self.local_encoder, self.local_decoder,
                   self.latent_encoder, self.latent_decoder]
         for m in models:
             m.to(self.device).train()
 
         for epoch in range(num_epochs):
+            total_loss = 0.0
             for batch in self.train_loader:
+                batch = batch.to(self.device)
                 self.optimizer.zero_grad()
-                out = self._forward(batch)
-                # loss goes here
-                # self.optimizer.step()
+                loss = self.loss_manager.loss(
+                    batch,
+                    self.local_encoder,
+                    self.latent_encoder,
+                    self.latent_decoder,
+                    self.local_decoder,
+                )
+                loss.backward()
+                self.optimizer.step()
+                total_loss += loss.item()
 
-            print(f"Epoch {epoch + 1}/{num_epochs} done | "
-                  f"train batches: {len(self.train_loader)} | "
-                  f"val batches: {len(self.val_loader)}")
+            avg_loss = total_loss / len(self.train_loader)
+            print(f"Epoch {epoch + 1}/{num_epochs} | loss: {avg_loss:.4f}")
