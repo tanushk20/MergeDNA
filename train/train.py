@@ -88,3 +88,23 @@ class Trainer:
 
             epoch_avg = running["total"] / (len(self.train_loader) % LOG_EVERY or LOG_EVERY)
             pbar.write(f"Epoch {epoch + 1}/{num_epochs} done | avg total loss: {epoch_avg:.4f}")
+
+            # validation
+            for m in models:
+                m.eval()
+            val_total = 0.0
+            with torch.no_grad():
+                for batch in tqdm(self.val_loader, desc="  val", leave=False):
+                    batch = batch.to(self.device)
+                    _, breakdown = self.loss_manager.loss(
+                        batch,
+                        self.local_encoder,
+                        self.latent_encoder,
+                        self.latent_decoder,
+                        self.local_decoder,
+                        K=self.K,
+                    )
+                    val_total += breakdown["total"]
+            print(f"  val loss: {val_total / len(self.val_loader):.4f}")
+            for m in models:
+                m.train()
