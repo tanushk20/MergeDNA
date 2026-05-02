@@ -40,6 +40,23 @@ class LocalEncoder(nn.Module):
             if source_win is not None:
                 source = source_win.view(B_cur, num_windows * K_new, -1)
 
+        # Expand window-local source (B, L', K_init) -> global (B, L', N)
+        # so each merged token knows which of the N original tokens it covers.
+        if source is not None:
+            L_prime = source.shape[1]
+            K_final = L_prime // num_windows          # tokens per window after all merges
+
+            k_idx = torch.arange(self.K, device=x.device)           # (K_init,)
+            m_idx = torch.arange(L_prime, device=x.device)          # (L',)
+            win_idx = m_idx // K_final                               # (L',)
+            global_col = (win_idx.unsqueeze(1) * self.K             # (L', K_init)
+                          + k_idx.unsqueeze(0))
+            global_col = global_col.unsqueeze(0).expand(B, -1, -1)  # (B, L', K_init)
+
+            global_source = torch.zeros(B, L_prime, N, device=x.device)
+            global_source.scatter_(-1, global_col, source)           # (B, L', N)
+            source = global_source
+
         return x, source
 
 
